@@ -1,0 +1,37 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Upgrade all packages
+  ansible.builtin.apt:
+    upgrade: dist
+
+- name: Install essential packages
+  ansible.builtin.apt:
+    name:
+      - curl
+      - wget
+      - htop
+      - jq
+      - unattended-upgrades
+      - apt-transport-https
+      - gnupg
+    state: present
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ timezone }}"
+
+- name: Enable unattended-upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart unattended-upgrades

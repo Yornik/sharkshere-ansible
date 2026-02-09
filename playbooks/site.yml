@@ -1,0 +1,10 @@
+---
+- name: Configure jump hosts
+  hosts: jump_hosts
+  become: true
+  roles:
+    - base
+    - ssh_hardening
+    - fail2ban
+    - tailscale
+    - caddy
