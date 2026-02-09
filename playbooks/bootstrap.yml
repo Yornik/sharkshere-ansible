@@ -27,8 +27,13 @@
         mode: "0440"
         validate: visudo -cf %s
 
+    - name: Read root authorized_keys from remote
+      ansible.builtin.slurp:
+        src: /root/.ssh/authorized_keys
+      register: root_authorized_keys
+
     - name: Copy root authorized_keys to ansible user
       ansible.posix.authorized_key:
         user: ansible
-        key: "{{ lookup('file', '/root/.ssh/authorized_keys') }}"
+        key: "{{ root_authorized_keys.content | b64decode }}"
         state: present

@@ -1,5 +1,5 @@
 ---
-- name: Reload caddy
+- name: Restart fail2ban
   ansible.builtin.service:
-    name: caddy
+    name: fail2ban
     state: restarted

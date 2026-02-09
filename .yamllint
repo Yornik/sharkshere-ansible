@@ -16,4 +16,4 @@ rules:
     forbid-explicit-octal: true
 
 ignore:
-  - group_vars/jump_hosts/secrets.enc.yml
+  - inventory/group_vars/jump_hosts/secrets.sops.yml
