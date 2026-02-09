@@ -66,3 +66,5 @@ Pull requests run three checks:
 1. **yamllint** — YAML formatting
 2. **ansible-lint** — Ansible best practices
 3. **syntax-check** — `ansible-playbook --syntax-check`
+
+All three checks must pass before merging to `main`.
