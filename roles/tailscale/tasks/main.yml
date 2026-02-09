@@ -1,7 +1,7 @@
 ---
 - name: Add Tailscale GPG key
   ansible.builtin.get_url:
-    url: https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg
+    url: https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg
     dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
     mode: "0644"
 
@@ -9,7 +9,7 @@
   ansible.builtin.apt_repository:
     repo: >-
       deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg]
-      https://pkgs.tailscale.com/stable/debian bookworm main
+      https://pkgs.tailscale.com/stable/debian trixie main
     filename: tailscale
     state: present
 
