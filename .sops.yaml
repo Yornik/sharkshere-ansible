@@ -1,4 +1,4 @@
 ---
 creation_rules:
-  - path_regex: \.enc\.yml$
+  - path_regex: \.sops\.yml$
     age: age1uhgqfcm3tfuzv3tq8d62medf04g977zas2hr9wmntc8wjn2e3asqvp7adp
