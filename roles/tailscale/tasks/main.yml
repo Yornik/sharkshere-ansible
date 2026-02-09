@@ -41,3 +41,12 @@
     (tailscale_status.stdout | from_json).BackendState != "Running"
   changed_when: true
   notify: Restart tailscaled
+
+- name: Get Tailscale IP
+  ansible.builtin.command: tailscale ip -4
+  register: tailscale_ip_result
+  changed_when: false
+
+- name: Set tailscale_ip fact
+  ansible.builtin.set_fact:
+    tailscale_ip: "{{ tailscale_ip_result.stdout | trim }}"
