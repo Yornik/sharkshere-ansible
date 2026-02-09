@@ -1,0 +1,34 @@
+---
+# Run once as root to create the ansible user and lock down SSH.
+# Usage: ansible-playbook playbooks/bootstrap.yml -u root
+- name: Bootstrap jump hosts
+  hosts: jump_hosts
+  gather_facts: true
+  tasks:
+    - name: Install sudo
+      ansible.builtin.apt:
+        name: sudo
+        state: present
+        update_cache: true
+
+    - name: Create ansible user
+      ansible.builtin.user:
+        name: ansible
+        shell: /bin/bash
+        groups: sudo
+        append: true
+
+    - name: Allow ansible user passwordless sudo
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/ansible
+        content: "ansible ALL=(ALL) NOPASSWD:ALL\n"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: visudo -cf %s
+
+    - name: Copy root authorized_keys to ansible user
+      ansible.posix.authorized_key:
+        user: ansible
+        key: "{{ lookup('file', '/root/.ssh/authorized_keys') }}"
+        state: present
