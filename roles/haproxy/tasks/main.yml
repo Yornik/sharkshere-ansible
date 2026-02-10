@@ -1,0 +1,51 @@
+---
+- name: Stop and disable caddy
+  ansible.builtin.service:
+    name: caddy
+    state: stopped
+    enabled: false
+  register: haproxy_caddy_stop
+  failed_when:
+    - haproxy_caddy_stop is failed
+    - "'Could not find the requested service' not in haproxy_caddy_stop.msg"
+
+- name: Remove caddy package
+  ansible.builtin.apt:
+    name: caddy
+    state: absent
+    purge: true
+
+- name: Remove Caddy apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.asc]
+      https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main
+    filename: caddy-stable
+    state: absent
+
+- name: Remove Caddy GPG key
+  ansible.builtin.file:
+    path: /usr/share/keyrings/caddy-stable-archive-keyring.asc
+    state: absent
+
+- name: Install haproxy
+  ansible.builtin.apt:
+    name: haproxy
+    state: present
+    update_cache: true
+
+- name: Deploy haproxy.cfg
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: "0644"
+    validate: haproxy -c -f %s
+  notify: Reload haproxy
+
+- name: Enable and start haproxy
+  ansible.builtin.service:
+    name: haproxy
+    state: started
+    enabled: true

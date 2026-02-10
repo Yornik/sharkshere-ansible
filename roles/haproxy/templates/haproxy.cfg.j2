@@ -1,0 +1,33 @@
+global
+    log /dev/log local0
+    maxconn 4096
+    daemon
+
+resolvers tailscale
+    nameserver ts 100.100.100.100:53
+    resolve_retries 3
+    timeout resolve 1s
+    timeout retry 1s
+    hold valid 10s
+
+defaults
+    log     global
+    mode    tcp
+    option  tcplog
+    timeout connect 5s
+    timeout client  30s
+    timeout server  30s
+
+frontend http
+    bind *:80
+    default_backend traefik_http
+
+frontend https
+    bind *:443
+    default_backend traefik_https
+
+backend traefik_http
+    server traefik traefik:80 resolvers tailscale check send-proxy-v2
+
+backend traefik_https
+    server traefik traefik:443 resolvers tailscale check send-proxy-v2

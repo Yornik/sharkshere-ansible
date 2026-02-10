@@ -4,5 +4,4 @@ ssh_max_auth_tries: 3
 fail2ban_maxretry: 5
 fail2ban_bantime: 3600
 fail2ban_findtime: 600
-caddy_admin_listen: "{{ tailscale_ip }}:2019"
 tailscale_tags: "tag:jump-host"
