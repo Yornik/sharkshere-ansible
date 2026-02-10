@@ -4,7 +4,10 @@
     name: caddy
     state: stopped
     enabled: false
-  ignore_errors: true
+  register: caddy_stop
+  failed_when:
+    - caddy_stop is failed
+    - "'Could not find the requested service' not in caddy_stop.msg"
 
 - name: Remove caddy package
   ansible.builtin.apt:
