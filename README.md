@@ -21,12 +21,12 @@ Inventory is generated from OpenTofu outputs in `jumpingsharks`.
 
 ```text
 Internet
-  -> jump hosts (Caddy + TLS + host controls)
+  -> jump hosts (HAProxy TCP load balancer + host controls)
   -> Tailscale mesh
   -> private services / Kubernetes ingress
 ```
 
-Caddy admin API is intentionally bound to Tailscale (`:2019`) instead of public interfaces.
+HAProxy terminates at L4 and forwards traffic to the internal Traefik endpoint over Tailscale.
 
 ## Roles
 
@@ -36,7 +36,7 @@ Caddy admin API is intentionally bound to Tailscale (`:2019`) instead of public 
 | `ssh_hardening` | key-only auth and stricter SSH posture |
 | `fail2ban` | brute-force protection |
 | `tailscale` | private connectivity between edge and internal network |
-| `caddy` | reverse proxy and cert automation |
+| `haproxy` | TCP edge load balancing for HTTP/HTTPS into cluster ingress |
 
 ## Design Choices
 
