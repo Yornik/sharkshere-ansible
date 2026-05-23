@@ -21,9 +21,21 @@ frontend https
     bind :::443
     default_backend traefik_https
 
+# Exposed on :2222 because :22 is the jump host's own sshd.
+frontend gitlab_shell
+    bind 0.0.0.0:2222
+    bind :::2222
+    default_backend gitlab_shell
+
 backend traefik_http
     server traefik traefik.hedgehog-wage.ts.net:80 check
 
 backend traefik_https
     server traefik traefik.hedgehog-wage.ts.net:443 check send-proxy-v2
+
+backend gitlab_shell
+    # init-addr lets haproxy start when the Tailscale name doesn't yet resolve
+    # (e.g. before the in-cluster gitlab-shell Service exists on first install).
+    default-server init-addr last,libc,none
+    server gitlab-shell gitlab-shell.hedgehog-wage.ts.net:22 check
 
