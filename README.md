@@ -127,4 +127,4 @@ This edge layer improves exposure and security posture, but it does not remove c
 - Single residential ISP uplink
 - Upstream dependency on shared NAS storage for some workloads
 
-These are explicitly accepted tradeoffs for the homelab budget/complexity envelope.
+A UPS doesn't fix the power-outage failure mode by itself — when the neighborhood loses power, the ISP's street-cabinet equipment usually drops within minutes, so the cluster stays up with no upstream connectivity. Real mitigation needs an independent secondary uplink (LTE/5G failover with its own battery). These are explicitly accepted tradeoffs for the homelab budget/complexity envelope.
