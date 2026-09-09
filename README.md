@@ -2,8 +2,6 @@
 
 This repository configures the two edge hosts of the sharkshere platform with Ansible. It takes a new Debian 13 server from `jumpingsharks` and makes it a hardened TCP load balancer on the Tailscale mesh.
 
-This document uses a style based on ASD-STE100 Simplified Technical English. Sentences are short. Each sentence gives one instruction or one fact.
-
 ## What this repository does
 
 - It hardens SSH. Only keys can log in. Root cannot log in.
@@ -25,6 +23,7 @@ This repository is one of three:
 | Document | Content |
 |---|---|
 | [`docs/tech/README.md`](docs/tech/README.md) | Full technical overview: traffic flow diagram, HAProxy frontend table, role descriptions, design notes, constraints. |
+| [`docs/styleguide.md`](docs/styleguide.md) | Writing rules for this README, the files in `docs/` and manifest comments. |
 
 ## Repository layout
 
@@ -39,6 +38,7 @@ roles/ssh_hardening                  sshd configuration.
 roles/fail2ban                       fail2ban jail for sshd.
 roles/tailscale                      Tailscale package and tailnet login.
 roles/haproxy                        HAProxy package and haproxy.cfg.
+docs/                                Technical overview and style guide.
 ```
 
 ## Before you start
