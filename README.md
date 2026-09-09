@@ -1,130 +1,107 @@
 # sharkshere-ansible
 
-Host hardening + edge service deployment for the sharkshere platform — Ansible roles that take a fresh Debian 13 jump host from `tofu apply` to a hardened TCP load-balancer terminating public traffic and tunneling it into a private Tailscale mesh.
+This repository configures the two edge hosts of the sharkshere platform with Ansible. It takes a new Debian 13 server from `jumpingsharks` and makes it a hardened TCP load balancer on the Tailscale mesh.
 
-This is the middle layer of a three-repo platform:
+## What this repository does
 
-| Repo | Layer | Responsibility |
+- It hardens SSH. Only keys can log in. Root cannot log in.
+- It installs fail2ban for the host SSH service.
+- It installs unattended-upgrades.
+- It joins the host to the Tailscale mesh with an auth key from SOPS.
+- It installs HAProxy. HAProxy forwards TCP on ports 80, 443 and 2222 into the cluster over Tailscale.
+
+This repository is one of three:
+
+| Repository | Layer | Function |
 |---|---|---|
-| [`jumpingsharks`](https://github.com/Yornik/jumpingsharks) | infrastructure | provisions Hetzner edge hosts + DNS/rDNS via OpenTofu |
-| `sharkshere-ansible` (this repo) | hosts | hardens edge hosts, deploys HAProxy + Tailscale + fail2ban |
-| [`sharkshere-gitops`](https://github.com/Yornik/sharkshere-gitops) | workloads | reconciles ~40 ArgoCD Applications behind that edge |
+| [`jumpingsharks`](https://github.com/Yornik/jumpingsharks) | infrastructure | Creates the two Hetzner edge hosts and their DNS with OpenTofu. |
+| `sharkshere-ansible` (this repository) | hosts | Hardens the edge hosts. Installs HAProxy, Tailscale and fail2ban. |
+| [`sharkshere-gitops`](https://github.com/Yornik/sharkshere-gitops) | workloads | Reconciles the applications in the cluster with ArgoCD. |
 
-## Managed hosts
+## Documents
 
-| Host | Location | Type | Role |
-|------|----------|------|------|
-| `jump-eu-central` | Nuremberg (`nbg1`) | Hetzner `CX23` | edge L4 load balancer + Tailscale node |
-| `jump-eu-north` | Helsinki (`hel1`) | Hetzner `CX23` | edge L4 load balancer + Tailscale node |
+| Document | Content |
+|---|---|
+| [`docs/tech/README.md`](docs/tech/README.md) | Full technical overview: traffic flow diagram, HAProxy frontend table, role descriptions, design notes, constraints. |
+| [`docs/styleguide.md`](docs/styleguide.md) | Writing rules for this README, the files in `docs/` and manifest comments. |
 
-Both publish under the same `jump.fedishark.eu` round-robin A/AAAA, fronting the cluster from two geographically separate POPs.
+## Repository layout
 
-## Traffic flow
-
-```mermaid
-flowchart LR
-  Internet([Internet])
-  subgraph Edge["Hetzner edge (this repo)"]
-    H80["HAProxy :80"]
-    H443["HAProxy :443<br/>PROXY v2"]
-    H2222["HAProxy :2222<br/>(GitLab SSH)"]
-  end
-  subgraph TS["Tailscale mesh"]
-    Traefik["traefik.hedgehog-wage.ts.net:443"]
-    Shell["gitlab-shell.hedgehog-wage.ts.net:22"]
-  end
-  subgraph K8s["Talos cluster"]
-    TraefikPod["Traefik (in-cluster)<br/>TLS via Let's Encrypt"]
-    ShellPod["gitlab-shell pods"]
-  end
-
-  Internet --> H80
-  Internet --> H443
-  Internet --> H2222
-  H80 --> Traefik
-  H443 -->|"PROXY v2"| Traefik
-  H2222 --> Shell
-  Traefik --> TraefikPod
-  Shell --> ShellPod
+```text
+ansible.cfg                          Ansible settings.
+inventory/hosts.ini                  The two edge hosts. Generated from the jumpingsharks outputs.
+inventory/group_vars/jump_hosts/     Variables. secrets.sops.yml is encrypted with SOPS.
+playbooks/bootstrap.yml              First run as root. Creates the ansible user.
+playbooks/site.yml                   Full configuration. Runs all roles in order.
+roles/base                           Packages, timezone, unattended-upgrades.
+roles/ssh_hardening                  sshd configuration.
+roles/fail2ban                       fail2ban jail for sshd.
+roles/tailscale                      Tailscale package and tailnet login.
+roles/haproxy                        HAProxy package and haproxy.cfg.
+docs/                                Technical overview and style guide.
 ```
 
-HAProxy runs L4 TCP only — TLS terminates inside the cluster at Traefik, which sees real client IPs via the **PROXY protocol v2** marker HAProxy injects on the HTTPS backend.
+## Before you start
 
-## HAProxy frontends
+Make sure that you have:
 
-| Bind | Mode | Backend | Notes |
-|---|---|---|---|
-| `:80` | TCP | `traefik.hedgehog-wage.ts.net:80` | HTTP, used for ACME HTTP-01 challenge + HTTP→HTTPS redirect at Traefik |
-| `:443` | TCP | `traefik.hedgehog-wage.ts.net:443` | `send-proxy-v2` so Traefik sees real client IPs |
-| `:2222` | TCP | `gitlab-shell.hedgehog-wage.ts.net:22` | GitLab SSH (`:2222` so jump-host sshd keeps `:22`); `init-addr last,libc,none` so haproxy boots even when the Tailscale MagicDNS name isn't yet resolvable |
+- Ansible 2.16 or later.
+- The collections from `requirements.yml`. Install them with `ansible-galaxy collection install -r requirements.yml`.
+- SOPS and the age key at `~/.config/sops/age/keys.txt`.
+- SSH access to the hosts as `ansible`. For a new host, see [How to bootstrap a new host](#how-to-bootstrap-a-new-host).
 
-## Roles
+## How to bootstrap a new host
 
-Run in order from `playbooks/site.yml`:
+Do this one time for each new host. It creates the `ansible` user.
 
-| Role | Responsibility |
-|------|----------------|
-| `base` | package updates, baseline packages (`python3`, etc.), timezone, unattended-upgrades |
-| `ssh_hardening` | key-only auth, stricter SSH posture, disable root login |
-| `fail2ban` | brute-force protection on host sshd (separate from any Traefik-level middleware in the cluster) |
-| `tailscale` | upstream apt repo + tailnet authentication via SOPS-encrypted auth key |
-| `haproxy` | install + render `haproxy.cfg.j2` with config validation via `haproxy -c -f %s` before reload |
+1. Make sure that the host is in `inventory/hosts.ini`.
+2. Run `ansible-playbook playbooks/bootstrap.yml -e ansible_user=root`.
+3. Run the full configuration. See the next procedure.
 
-## Engineering highlights
+## How to configure the hosts
 
-- **Idempotent and role-scoped.** Every run is safe to re-execute; roles fail fast on unexpected state rather than papering over drift.
-- **Security defaults are baseline, not a checklist.** SSH hardening, fail2ban, and unattended-upgrades happen on first boot before any workload reaches the host.
-- **PROXY protocol v2 end-to-end** preserves real client IPs from the edge into the cluster. Rate-limiting, audit logs, and Vaultwarden/GitLab auth flows all see the real origin IP — not the Tailscale tunnel IP.
-- **Tailscale tagged-device auth** via `tailscale_auth_key` from SOPS — no interactive login in the apt-installed runtime, no token rotation drift between hosts.
-- **Config validation pre-reload.** The HAProxy template task uses Ansible's `validate:` option to run `haproxy -c -f <tempfile>` against the *new* config before it's installed; a syntax error in `haproxy.cfg.j2` fails the play instead of taking the edge offline on `systemctl reload`.
-- **PR-gated.** `yamllint` + `ansible-lint` + `ansible-playbook --syntax-check` run before merge.
+1. Run `ansible-playbook playbooks/site.yml --check --diff`. Read the output.
+2. Run `ansible-playbook playbooks/site.yml`.
+3. To change one host only, add `--limit jump-eu-central` or `--limit jump-eu-north`.
 
-## Prerequisites
+Each role is idempotent. A second run makes no changes.
 
-- Ansible (>= 2.16)
-- SSH key access to jump hosts (the `ansible` user is created by `playbooks/bootstrap.yml` on first run as root)
-- SOPS + age key at `~/.config/sops/age/keys.txt`
+CAUTION: Do not edit `/etc/haproxy/haproxy.cfg` on the host. The next run replaces it. Edit `roles/haproxy/templates/haproxy.cfg.j2`.
 
-Inventory is generated from OpenTofu outputs in `jumpingsharks`.
+## How to change the HAProxy configuration
 
-## Usage
+1. Edit `roles/haproxy/templates/haproxy.cfg.j2`.
+2. Run the configuration procedure above.
 
-```bash
-# all hosts
-ansible-playbook playbooks/site.yml
+Ansible validates the new file with `haproxy -c` before it installs it. If the file has an error, the play stops. The old file stays in place. HAProxy stays up.
 
-# single host
-ansible-playbook playbooks/site.yml --limit jump-eu-central
+NOTE: The `:2222` frontend uses `init-addr last,libc,none`. With this setting, HAProxy starts even when the Tailscale name of the backend does not resolve yet.
 
-# dry run with diff
-ansible-playbook playbooks/site.yml --check --diff
+## How to change a secret
 
-# first-time bootstrap (creates the `ansible` user; subsequent runs use it directly)
-ansible-playbook playbooks/bootstrap.yml -e ansible_user=root
-```
+1. Run `sops inventory/group_vars/jump_hosts/secrets.sops.yml`.
+2. Edit the value. Save the file.
+3. Commit the encrypted file.
 
-## Secrets
+CAUTION: Keep the `.sops.yml` file extension. The `community.sops` vars plugin reads only files with that extension.
 
-Edit the SOPS-encrypted vars file (note the `.sops.yml` extension required by the `community.sops` vars plugin):
+## How to open a pull request
 
-```bash
-sops group_vars/jump_hosts/secrets.sops.yml
-```
+1. Make the change on a branch.
+2. Open a pull request against `main`. CI runs three checks. See [CI checks](#ci-checks).
+3. Merge the pull request.
+4. Run the configuration procedure from `main`.
 
-## CI
+## CI checks
 
-PR checks:
+CI runs on each pull request. All three checks must pass before a merge.
 
-1. `yamllint`
-2. `ansible-lint`
-3. `ansible-playbook --syntax-check`
+| Check | What it does |
+|---|---|
+| `yamllint` | Checks the YAML files with the rules in `.yamllint`. |
+| `ansible-lint` | Checks the playbooks and roles against Ansible best practice. |
+| `ansible-playbook --syntax-check` | Checks the syntax of `playbooks/site.yml` and `playbooks/bootstrap.yml`. |
 
-## Homelab constraints
+## Known limits
 
-This edge layer improves exposure and security posture, but it does not remove core homelab constraints:
-
-- Single power source at the home site
-- Single residential ISP uplink
-- Upstream dependency on shared NAS storage for some workloads
-
-A UPS doesn't fix the power-outage failure mode by itself — when the neighborhood loses power, the ISP's street-cabinet equipment usually drops within minutes, so the cluster stays up with no upstream connectivity. Real mitigation needs an independent secondary uplink (LTE/5G failover with its own battery). These are explicitly accepted tradeoffs for the homelab budget/complexity envelope.
+The edge has two hosts in two regions. The cluster behind it is in a home. The home has one power feed, one internet uplink and one NAS. These are accepted limits. See [`docs/tech/README.md`](docs/tech/README.md#homelab-constraints) for the reasons.
